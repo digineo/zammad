@@ -45,26 +45,26 @@ else
 
 	# centos
 	if [ -n "$(which postgresql-setup)" ]; then
-    	    echo "preparing postgresql server"
-    	    postgresql-setup initdb
+        echo "preparing postgresql server"
+        postgresql-setup initdb
 
-    	    echo "backuping postgres config"
-    	    test -f /var/lib/pgsql/data/pg_hba.conf.bak || cp /var/lib/pgsql/data/pg_hba.conf /var/lib/pgsql/data/pg_hba.conf.bak
+        echo "backuping postgres config"
+        test -f /var/lib/pgsql/data/pg_hba.conf.bak || cp /var/lib/pgsql/data/pg_hba.conf /var/lib/pgsql/data/pg_hba.conf.bak
 
-    	    echo "allow login via username and password in postgresql"
-    	    sed 's/ident/trust/g' < /var/lib/pgsql/data/pg_hba.conf.bak > /var/lib/pgsql/data/pg_hba.conf
+        echo "allow login via username and password in postgresql"
+        sed 's/ident/trust/g' < /var/lib/pgsql/data/pg_hba.conf.bak > /var/lib/pgsql/data/pg_hba.conf
 
-    	    echo "restarting postgresql server"
-    	    ${INIT_CMD} restart postgresql
+        echo "restarting postgresql server"
+        ${INIT_CMD} restart postgresql
 
-    	    echo "create postgresql bootstart"
-    	    ${INIT_CMD} enable postgresql.service
+        echo "create postgresql bootstart"
+        ${INIT_CMD} enable postgresql.service
 	fi
 
         echo "creating zammad postgresql db"
         su - postgres -c "createdb -E UTF8 ${DB}"
 
-	echo "creating zammad postgresql user"
+        echo "creating zammad postgresql user"
         echo "CREATE USER \"${DB_USER}\" WITH PASSWORD '${DB_PASS}';" | su - postgres -c psql 
 
         echo "grant privileges to new postgresql user"
@@ -81,11 +81,11 @@ else
 	echo "installing zammd on mysql"
 
 	if [ -f "${MY_CNF}" ]; then
-    	    MYSQL_CREDENTIALS="--defaults-file=${MY_CNF}"
+        MYSQL_CREDENTIALS="--defaults-file=${MY_CNF}"
 	else
-    	    echo -n "Please enter your MySQL root password:"
-    	    read -s MYSQL_ROOT_PASS
-    	    MYSQL_CREDENTIALS="-u root -p${MYSQL_ROOT_PASS}"
+        echo -n "Please enter your MySQL root password:"
+        read -s MYSQL_ROOT_PASS
+        MYSQL_CREDENTIALS="-u root -p${MYSQL_ROOT_PASS}"
 	fi
 
 	echo "creating zammad mysql db"
@@ -118,6 +118,18 @@ fi
 echo "# Starting Zammad"
 ${INIT_CMD} start zammad
 
+# on centos, allow nginx to connect to application server
+if [ -n "$(which setsebool)" ]; then
+    setsebool httpd_can_network_connect on -P
+fi
+
+# on centos, open port 80 and 443
+if [ -n "$(which firewall-cmd)" ]; then
+    firewall-cmd --zone=public --add-port=80/tcp --permanent
+    firewall-cmd --zone=public --add-port=443/tcp --permanent
+    firewall-cmd --reload
+fi
+
 # copy nginx config
 if [ -n "$(which nginx)" ]; then
     # debian / ubuntu
@@ -132,9 +144,12 @@ if [ -n "$(which nginx)" ]; then
 	test -f ${NGINX_CONF} || cp ${ZAMMAD_DIR}/contrib/nginx/zammad.conf ${NGINX_CONF}
     fi
 
-    echo "# Restarting Nginx"
+    echo "restarting Nginx"
     ${INIT_CMD} restart nginx
-    
+
+    echo "create Nginx bootstart"
+    ${INIT_CMD} enable nginx
+
     echo -e "\nAdd your FQDN to servername directive in ${NGINX_CONF} and restart nginx if you're not testing localy"
     echo -e "or open http://localhost in your browser to start using Zammad.\n"
 else
